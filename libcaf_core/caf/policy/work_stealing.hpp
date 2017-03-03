@@ -96,18 +96,22 @@ public:
 
   // Goes on a raid in quest for a shiny new job.
   template <class Worker>
-  resumable* try_steal(Worker* self) {
+  resumable* try_steal(Worker* self, size_t &current) {
     auto p = self->parent();
     if (p->num_workers() < 2) {
       // you can't steal from yourself, can you?
       return nullptr;
     }
     // roll the dice to pick a victim other than ourselves
-    auto victim = d(self).uniform(d(self).rengine);
+    /*auto victim = d(self).uniform(d(self).rengine);
     if (victim == self->id())
       victim = p->num_workers() - 1;
     // steal oldest element from the victim's queue
-    return d(p->worker_by_id(victim)).queue.take_tail();
+    return d(p->worker_by_id(victim)).queue.take_tail();*/
+    auto wp = self->get_parent()->worker_ids;
+    if(current == self->id()) ++current;
+    current = current%wp.size();
+    return d(p->worker_by_id(wp[current++])).queue.take_tail();
   }
 
   template <class Coordinator>
@@ -144,6 +148,7 @@ public:
     // "signalizing" implementation based on mutexes and conition variables
     auto& strategies = d(self).strategies;
     resumable* job = nullptr;
+    size_t current = 0;
     for (auto& strat : strategies) {
       for (size_t i = 0; i < strat.attempts; i += strat.step_size) {
         job = d(self).queue.take_head();
@@ -151,7 +156,7 @@ public:
           return job;
         // try to steal every X poll attempts
         if ((i % strat.steal_interval) == 0) {
-          job = try_steal(self);
+          job = try_steal(self, current);
           if (job)
             return job;
         }

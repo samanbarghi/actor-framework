@@ -33,6 +33,14 @@
 namespace caf {
 namespace scheduler {
 
+class worker_group {
+public:
+	size_t id;
+	std::vector<size_t> worker_ids;
+	std::vector<worker_group*> wg_children;
+	worker_group* parent;
+	worker_group(worker_group* p, size_t i): parent(p), id(i){};
+};
 /// Policy-based implementation of the abstract coordinator base class.
 template <class Policy>
 class coordinator : public abstract_coordinator {
@@ -41,7 +49,7 @@ public:
 
   using policy_data = typename Policy::coordinator_data;
 
-  coordinator(actor_system& sys) : super(sys), data_(this) {
+  coordinator(actor_system& sys) : super(sys), data_(this), wg_root_(nullptr, 0) {
     // nop
   }
 
@@ -60,8 +68,17 @@ protected:
     // initialize workers vector
     auto num = num_workers();
     workers_.reserve(num);
-    for (size_t i = 0; i < num; ++i)
-      workers_.emplace_back(new worker_type(i, this, max_throughput_));
+
+    wg_root_.wg_children.reserve(2);
+    wg_root_.wg_children.push_back(new worker_group(&wg_root_, 1));
+    wg_root_.wg_children.push_back(new worker_group(&wg_root_, 2));
+    worker_group* wg = wg_root_.wg_children[0];
+    for (size_t i = 0; i < num; ++i){
+    	if(i == 12) wg=wg_root_.wg_children[1];
+      workers_.emplace_back(new worker_type(i, this, max_throughput_, wg));
+      wg->worker_ids.push_back(i);
+
+    }
     // start all workers now that all workers have been initialized
     for (auto& w : workers_)
       w->start();
@@ -131,6 +148,7 @@ protected:
   }
 
 private:
+  worker_group wg_root_;
   // usually of size std::thread::hardware_concurrency()
   std::vector<std::unique_ptr<worker_type>> workers_;
   // policy-specific data

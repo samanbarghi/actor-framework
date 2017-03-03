@@ -33,6 +33,7 @@ namespace scheduler {
 
 template <class Policy>
 class coordinator;
+class worker_group;
 
 /// Policy-based implementation of the abstract worker base class.
 template <class Policy>
@@ -42,21 +43,28 @@ public:
   using coordinator_ptr = coordinator<Policy>*;
   using policy_data = typename Policy::worker_data;
 
-  worker(size_t worker_id, coordinator_ptr worker_parent, size_t throughput)
+  worker(size_t worker_id, coordinator_ptr worker_parent, size_t throughput, worker_group* wg_parent)
       : execution_unit(&worker_parent->system()),
         max_throughput_(throughput),
         id_(worker_id),
         parent_(worker_parent),
-        data_(worker_parent) {
+        data_(worker_parent),
+		wg_parent(wg_parent){
     // nop
   }
 
   void start() {
+	  unsigned num_cpus = std::thread::hardware_concurrency();
+	  cpu_set_t cpuset;
+	  CPU_ZERO(&cpuset);
+	  CPU_SET(this->id_%num_cpus, &cpuset);
     CAF_ASSERT(this_thread_.get_id() == std::thread::id{});
     auto this_worker = this;
     this_thread_ = std::thread{[this_worker] {
       this_worker->run();
     }};
+
+    int rc = pthread_setaffinity_np(this_thread_.native_handle(), sizeof(cpu_set_t), &cpuset);
   }
 
   worker(const worker&) = delete;
@@ -102,6 +110,9 @@ public:
   size_t max_throughput() {
     return max_throughput_;
   }
+  worker_group* get_parent(){
+	  return wg_parent;
+  }
 
 private:
   void run() {
@@ -139,6 +150,7 @@ private:
       }
     }
   }
+  worker_group* wg_parent;
   // number of messages each actor is allowed to consume per resume
   size_t max_throughput_;
   // the worker's thread
