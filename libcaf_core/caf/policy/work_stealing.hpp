@@ -35,7 +35,6 @@
 
 namespace caf {
 namespace policy {
-
 /// Implements scheduling of actors via work stealing.
 /// @extends scheduler_policy
 class work_stealing : public unprofiled {
@@ -95,8 +94,8 @@ public:
   };
 
   // Goes on a raid in quest for a shiny new job.
-  template <class Worker>
-  resumable* try_steal(Worker* self, size_t &current) {
+  template <class Worker, class WorkerGroup>
+  resumable* try_steal(Worker* self, size_t &current, WorkerGroup wg_current, size_t &repeat) {
     auto p = self->parent();
     if (p->num_workers() < 2) {
       // you can't steal from yourself, can you?
@@ -108,10 +107,30 @@ public:
       victim = p->num_workers() - 1;
     // steal oldest element from the victim's queue
     return d(p->worker_by_id(victim)).queue.take_tail();*/
-    auto wp = self->get_parent()->worker_ids;
     if(current == self->id()) ++current;
-    current = current%wp.size();
-    return d(p->worker_by_id(wp[current++])).queue.take_tail();
+
+    auto wp = wg_current->worker_ids;
+    //if(current == min) current = max+1;
+    if(current > wp[wp.size()-1]){
+        if(repeat < 4 * log(wp.size())){
+            ++repeat;
+        }else{
+            repeat=0;
+            wg_current = wg_current->parent;
+            if(!wg_current)
+            //{
+                wg_current =  self->get_parent();
+       /*         min = max = self->id();
+            }else{
+                min = wp[0];
+                max = wp[wp.size()-1];
+            }*/
+        }
+        current = wg_current->worker_ids[0];
+    }
+    //std::cout << self->id() << ":" << current << std::endl;
+    //std::cout << current << std::endl;
+    return d(p->worker_by_id(current++)).queue.take_tail();
   }
 
   template <class Coordinator>
@@ -148,7 +167,9 @@ public:
     // "signalizing" implementation based on mutexes and conition variables
     auto& strategies = d(self).strategies;
     resumable* job = nullptr;
-    size_t current = 0;
+    size_t current = self->get_parent()->worker_ids[0];
+    auto wg_current = self->get_parent();
+    size_t repeat = 0;
     for (auto& strat : strategies) {
       for (size_t i = 0; i < strat.attempts; i += strat.step_size) {
         job = d(self).queue.take_head();
@@ -156,9 +177,11 @@ public:
           return job;
         // try to steal every X poll attempts
         if ((i % strat.steal_interval) == 0) {
-          job = try_steal(self, current);
+            ++self->all_steals;
+          job = try_steal(self, current, wg_current, repeat);
           if (job)
             return job;
+          ++self->failed_steals;
         }
         if (strat.sleep_duration.count() > 0)
           std::this_thread::sleep_for(strat.sleep_duration);

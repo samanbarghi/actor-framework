@@ -25,6 +25,7 @@
 #include <thread>
 #include <limits>
 #include <memory>
+#include <iostream>
 #include <condition_variable>
 
 #include "caf/scheduler/worker.hpp"
@@ -35,10 +36,10 @@ namespace scheduler {
 
 class worker_group {
 public:
+	worker_group* parent;
 	size_t id;
 	std::vector<size_t> worker_ids;
 	std::vector<worker_group*> wg_children;
-	worker_group* parent;
 	worker_group(worker_group* p, size_t i): parent(p), id(i){};
 };
 /// Policy-based implementation of the abstract coordinator base class.
@@ -69,14 +70,29 @@ protected:
     auto num = num_workers();
     workers_.reserve(num);
 
-    wg_root_.wg_children.reserve(2);
-    wg_root_.wg_children.push_back(new worker_group(&wg_root_, 1));
-    wg_root_.wg_children.push_back(new worker_group(&wg_root_, 2));
+    wg_root_.wg_children.reserve(8);
+    int id = 1;
+    for(size_t i = 0; i < 8; i++){
+        //root has id 0
+        wg_root_.wg_children.push_back(new worker_group(&wg_root_, id++));
+        //std::cout << i << ":" << id << std::endl;
+        for(size_t j = 0; j < 4; j++){
+            worker_group* wg_tmp = wg_root_.wg_children[i];
+            wg_tmp->wg_children.push_back(new worker_group(wg_tmp, id++));
+            wg_tmp->worker_ids.push_back(i*8+j*2);
+            wg_tmp->worker_ids.push_back(i*8+j*2+1);
+            //std::cout << "\t" << j << ":" << id << std::endl;
+
+        }
+    }
+
     worker_group* wg = wg_root_.wg_children[0];
     for (size_t i = 0; i < num; ++i){
-    	if(i == 12) wg=wg_root_.wg_children[1];
+//        std::cout << i/8 << ":" << (i%8)/2 << std::endl;
+        wg=wg_root_.wg_children[(i/8)]->wg_children[(i%4)];
       workers_.emplace_back(new worker_type(i, this, max_throughput_, wg));
       wg->worker_ids.push_back(i);
+      wg_root_.worker_ids.push_back(i);
 
     }
     // start all workers now that all workers have been initialized
@@ -148,13 +164,14 @@ protected:
   }
 
 private:
-  worker_group wg_root_;
   // usually of size std::thread::hardware_concurrency()
   std::vector<std::unique_ptr<worker_type>> workers_;
   // policy-specific data
   policy_data data_;
   // instance of our policy object
   Policy policy_;
+
+  worker_group wg_root_;
 };
 
 } // namespace scheduler

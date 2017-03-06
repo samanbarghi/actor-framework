@@ -143,6 +143,7 @@ private:
           break;
         }
         case resumable::shutdown_execution_unit: {
+            std::cout  << all_steals << ":" << failed_steals << ":" << (failed_steals/(double)all_steals) <<  std::endl;
           policy_.after_completion(this, job);
           policy_.before_shutdown(this);
           return;
@@ -150,7 +151,6 @@ private:
       }
     }
   }
-  worker_group* wg_parent;
   // number of messages each actor is allowed to consume per resume
   size_t max_throughput_;
   // the worker's thread
@@ -163,6 +163,11 @@ private:
   policy_data data_;
   // instance of our policy object
   Policy policy_;
+
+  worker_group* wg_parent;
+public:
+  size_t failed_steals = 0;
+  size_t all_steals;
 };
 
 } // namespace scheduler
