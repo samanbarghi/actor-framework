@@ -167,7 +167,7 @@ private:
   worker_group* wg_parent;
 public:
   size_t failed_steals = 0;
-  size_t all_steals;
+  size_t all_steals = 0;
 };
 
 } // namespace scheduler

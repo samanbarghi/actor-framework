@@ -95,7 +95,7 @@ public:
 
   // Goes on a raid in quest for a shiny new job.
   template <class Worker, class WorkerGroup>
-  resumable* try_steal(Worker* self, size_t &current, WorkerGroup wg_current, size_t &repeat) {
+  resumable* try_steal(Worker* self, size_t &current, WorkerGroup &wg_current, size_t &repeat) {
     auto p = self->parent();
     if (p->num_workers() < 2) {
       // you can't steal from yourself, can you?
@@ -107,15 +107,14 @@ public:
       victim = p->num_workers() - 1;
     // steal oldest element from the victim's queue
     return d(p->worker_by_id(victim)).queue.take_tail();*/
-    if(current == self->id()) ++current;
 
     auto wp = wg_current->worker_ids;
     //if(current == min) current = max+1;
     if(current > wp[wp.size()-1]){
-        if(repeat < 4 * log(wp.size())){
+/*        if(repeat < 4 * log(wp.size())){
             ++repeat;
         }else{
-            repeat=0;
+            repeat=0;*/
             wg_current = wg_current->parent;
             if(!wg_current)
             //{
@@ -125,8 +124,12 @@ public:
                 min = wp[0];
                 max = wp[wp.size()-1];
             }*/
-        }
+        //}
         current = wg_current->worker_ids[0];
+    }
+    if(current == self->id()) {
+        ++current;
+        return nullptr;
     }
     //std::cout << self->id() << ":" << current << std::endl;
     //std::cout << current << std::endl;
