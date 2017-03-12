@@ -42,7 +42,7 @@ public:
 
   /// Called immediately before resuming an actor.
   template <class Worker>
-  void before_resume(Worker*, resumable*) {
+  void before_resume(Worker* w, resumable* r) {
     // nop
   }
 

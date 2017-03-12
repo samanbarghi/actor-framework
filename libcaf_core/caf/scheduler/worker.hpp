@@ -52,11 +52,16 @@ public:
   }
 
   void start() {
+	  unsigned num_cpus = std::thread::hardware_concurrency();
+	  cpu_set_t cpuset;
+	  CPU_ZERO(&cpuset);
+	  CPU_SET(this->id_%num_cpus, &cpuset);
     CAF_ASSERT(this_thread_.get_id() == std::thread::id{});
     auto this_worker = this;
     this_thread_ = std::thread{[this_worker] {
       this_worker->run();
     }};
+    int rc = pthread_setaffinity_np(this_thread_.native_handle(), sizeof(cpu_set_t), &cpuset);
   }
 
   worker(const worker&) = delete;
@@ -132,6 +137,7 @@ private:
           break;
         }
         case resumable::shutdown_execution_unit: {
+            std::cout << all_steals << ":" << failed_steals << ":" <<  (failed_steals/(double)all_steals) <<  std::endl;
           policy_.after_completion(this, job);
           policy_.before_shutdown(this);
           return;
@@ -151,6 +157,10 @@ private:
   policy_data data_;
   // instance of our policy object
   Policy policy_;
+public:
+  size_t failed_steals = 0;
+  size_t all_steals = 0;
+
 };
 
 } // namespace scheduler

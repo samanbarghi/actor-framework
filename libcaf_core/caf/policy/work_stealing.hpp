@@ -102,6 +102,11 @@ public:
       // you can't steal from yourself, can you?
       return nullptr;
     }
+    /*if(self->last_send && self->last_send != self){
+        auto job = d(((Worker*)(self->last_send))).queue.take_tail();
+        self->last_send = nullptr;
+        return job;
+    }*/
     // roll the dice to pick a victim other than ourselves
     auto victim = d(self).uniform(d(self).rengine);
     if (victim == self->id())
@@ -151,9 +156,11 @@ public:
           return job;
         // try to steal every X poll attempts
         if ((i % strat.steal_interval) == 0) {
+            ++self->all_steals;
           job = try_steal(self);
           if (job)
             return job;
+          ++self->failed_steals;
         }
         if (strat.sleep_duration.count() > 0)
           std::this_thread::sleep_for(strat.sleep_duration);

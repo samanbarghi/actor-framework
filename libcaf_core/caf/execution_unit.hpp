@@ -48,6 +48,10 @@ public:
     CAF_ASSERT(system_ != nullptr);
     return *system_;
   }
+  size_t id() const {
+    return 0;
+  }
+
 
   /// Returns a pointer to the proxy factory currently associated to this unit.
   proxy_registry* proxy_registry_ptr() {
@@ -59,6 +63,7 @@ public:
     proxies_ = ptr;
   }
 
+  execution_unit* last_send = nullptr;
 protected:
   actor_system* system_;
   proxy_registry* proxies_;

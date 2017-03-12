@@ -151,6 +151,8 @@ void scheduled_actor::enqueue(mailbox_element_ptr ptr, execution_unit* eu) {
     }
     case detail::enqueue_result::success:
       // enqueued to a running actors' mailbox; nothing to do
+      if(eu)
+        eu->last_send = this->ctx;
       CAF_LOG_ACCEPT_EVENT();
       break;
   }
@@ -212,6 +214,7 @@ scheduled_actor::resume(execution_unit* ctx, size_t max_throughput) {
   CAF_PUSH_AID(id());
   if (!activate(ctx))
     return resume_result::done;
+  this->ctx = ctx;
   size_t handled_msgs = 0;
   auto reset_timeout_if_needed = [&] {
     if (handled_msgs > 0 && !bhvr_stack_.empty())

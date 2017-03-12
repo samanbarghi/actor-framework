@@ -69,6 +69,7 @@ result<message> drop(scheduled_actor*, message_view&);
 /// @extends local_actor
 class scheduled_actor : public local_actor, public resumable {
 public:
+    execution_unit* ctx;
   // -- member types -----------------------------------------------------------
 
   /// The message ID of an outstanding response with its callback.
