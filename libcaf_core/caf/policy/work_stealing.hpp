@@ -93,9 +93,30 @@ public:
     poll_strategy strategies[3];
   };
 
+  template<class Worker>
+  int64_t get_size(Worker* self) {
+    return d(self).queue.get_size();
+  }
+
+  // Goes on a raid in quest for a shiny new job.
+  template <class Worker>
+  resumable* try_steal(Worker* self) {
+    auto p = self->parent();
+    if (p->num_workers() < 2) {
+      // you can't steal from yourself, can you?
+      return nullptr;
+    }
+    // roll the dice to pick a victim other than ourselves
+    auto victim = d(self).uniform(d(self).rengine);
+    if (victim == self->id())
+      victim = p->num_workers() - 1;
+    // steal oldest element from the victim's queue
+    return d(p->worker_by_id(victim)).queue.take_tail();
+  }
+
   // Goes on a raid in quest for a shiny new job.
   template <class Worker, class WorkerGroup>
-  resumable* try_steal(Worker* self, size_t &current, WorkerGroup &wg_current, size_t &repeat) {
+  resumable* try_steal_h(Worker* self, size_t &current, WorkerGroup &wg_current, size_t &repeat) {
     auto p = self->parent();
     if (p->num_workers() < 2) {
       // you can't steal from yourself, can you?
@@ -110,15 +131,31 @@ public:
 
     auto wp = wg_current->worker_ids;
     //if(current == min) current = max+1;
+	/*if(wg_current-> parent == nullptr)
+	{
+		auto victim = d(self).uniform(d(self).rengine);
+		if (victim == self->id())
+		  victim = p->num_workers() - 1;
+		// steal oldest element from the victim's queue
+		return d(p->worker_by_id(victim)).queue.take_tail();
+
+	}*/
+
+	if(wg_current-> parent == nullptr){
+        wg_current = nullptr;
+        return nullptr;
+    }
     if(current > wp[wp.size()-1]){
 /*        if(repeat < 4 * log(wp.size())){
             ++repeat;
         }else{
             repeat=0;*/
             wg_current = wg_current->parent;
-            if(!wg_current)
+            if(!wg_current){
             //{
-                wg_current =  self->get_parent();
+                return nullptr;
+            //    wg_current =  self->get_parent();
+            }
        /*         min = max = self->id();
             }else{
                 min = wp[0];
@@ -131,8 +168,13 @@ public:
         ++current;
         return nullptr;
     }
-    //std::cout << self->id() << ":" << current << std::endl;
+//    if(self->id() == 63)
+//        std::cout << self->id() << ":" << current << std::endl;
     //std::cout << current << std::endl;
+	if(d(p->worker_by_id(current)).queue.get_size() == 0){
+		++current;
+		return nullptr;
+		}
     return d(p->worker_by_id(current++)).queue.take_tail();
   }
 
@@ -173,6 +215,18 @@ public:
     size_t current = self->get_parent()->worker_ids[0];
     auto wg_current = self->get_parent();
     size_t repeat = 0;
+    //hierarchical stealing
+    while(wg_current) {
+        job = d(self).queue.take_head();
+        if (job)
+          return job;
+        // try to steal every X poll attempts
+            ++self->all_steals;
+          job = try_steal_h(self, current, wg_current, repeat);
+          if (job)
+            return job;
+          ++self->failed_steals;
+      }
     for (auto& strat : strategies) {
       for (size_t i = 0; i < strat.attempts; i += strat.step_size) {
         job = d(self).queue.take_head();
@@ -180,15 +234,17 @@ public:
           return job;
         // try to steal every X poll attempts
         if ((i % strat.steal_interval) == 0) {
-            ++self->all_steals;
-          job = try_steal(self, current, wg_current, repeat);
-          if (job)
+          ++self->all_steals;
+          job = try_steal(self);
+          if (job){
             return job;
+          }
           ++self->failed_steals;
         }
         if (strat.sleep_duration.count() > 0)
           std::this_thread::sleep_for(strat.sleep_duration);
       }
+      ++self->repeat_steals;
     }
     // unreachable, because the last strategy loops
     // until a job has been dequeued

@@ -84,6 +84,11 @@ public:
   using pointer = value_type*;
   using const_pointer = const value_type*;
 
+  int64_t get_size(){
+	  return head_counter_+tail_counter_;
+  }
+
+
   class node {
   public:
     pointer value;
@@ -131,6 +136,7 @@ public:
     // publish & swing last forward
     tail_.load()->next = tmp;
     tail_ = tmp;
+	++tail_counter_;
   }
 
   // acquires both locks
@@ -155,6 +161,7 @@ public:
       tail_ = tmp;
     }
     first->next = tmp;
+	++head_counter_;
   }
 
   // acquires only one lock, returns nullptr on failure
@@ -174,6 +181,7 @@ public:
       result = next->value;
       next->value = nullptr;
       head_ = next;
+	  --head_counter_;
     }
     return result;
   }
@@ -195,6 +203,7 @@ public:
       tail_ = find_predecessor(last.get());
       CAF_ASSERT(tail_ != nullptr);
       tail_.load()->next = nullptr;
+	  --tail_counter_;
     }
     return result;
   }
@@ -225,6 +234,10 @@ private:
   // enforce exclusive access
   std::atomic_flag head_lock_;
   std::atomic_flag tail_lock_;
+
+  int64_t head_counter_ = 0;
+  int64_t tail_counter_ = 0;
+
 
   class lock_guard {
   public:

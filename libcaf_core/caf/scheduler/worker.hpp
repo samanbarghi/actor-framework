@@ -22,6 +22,7 @@
 
 #include <cstddef>
 
+
 #include "caf/logger.hpp"
 #include "caf/resumable.hpp"
 #include "caf/execution_unit.hpp"
@@ -64,7 +65,9 @@ public:
       this_worker->run();
     }};
 
-    int rc = pthread_setaffinity_np(this_thread_.native_handle(), sizeof(cpu_set_t), &cpuset);
+    //int rc =
+    pthread_setaffinity_np(this_thread_.native_handle(), sizeof(cpu_set_t), &cpuset);
+//    std::cout << this->id_ << ":" << this->get_parent()->id << std::endl;
   }
 
   worker(const worker&) = delete;
@@ -123,8 +126,11 @@ private:
       CAF_ASSERT(job != nullptr);
       CAF_ASSERT(job->subtype() != resumable::io_actor);
       CAF_PUSH_AID_FROM_PTR(dynamic_cast<abstract_actor*>(job));
+      size_t t = max_throughput_;
+      if(policy_.get_size(this) < 5)
+          t = max_throughput_ * 2;
       policy_.before_resume(this, job);
-      auto res = job->resume(this, max_throughput_);
+      auto res = job->resume(this, t);
       policy_.after_resume(this, job);
       switch (res) {
         case resumable::resume_later: {
@@ -143,7 +149,9 @@ private:
           break;
         }
         case resumable::shutdown_execution_unit: {
-            std::cout  << all_steals << ":" << failed_steals << ":" << (failed_steals/(double)all_steals) <<  std::endl;
+            std::stringstream ss;
+            ss << all_steals << ":" << failed_steals << ":" <<  repeat_steals << ":" << (failed_steals/(double)all_steals) <<  std::endl;
+            std::cout << ss.str();
           policy_.after_completion(this, job);
           policy_.before_shutdown(this);
           return;
@@ -168,6 +176,7 @@ private:
 public:
   size_t failed_steals = 0;
   size_t all_steals = 0;
+  size_t repeat_steals = 0;
 };
 
 } // namespace scheduler

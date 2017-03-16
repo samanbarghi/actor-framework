@@ -88,6 +88,10 @@ public:
   }
 
   template <class Worker>
+  int64_t get_size(Worker* self){
+    return 0;
+  }
+  template <class Worker>
   resumable* dequeue(Worker* self) {
     auto& parent_data = d(self->parent());
     std::unique_lock<std::mutex> guard(parent_data.lock);

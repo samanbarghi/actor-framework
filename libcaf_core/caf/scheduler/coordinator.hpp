@@ -70,29 +70,32 @@ protected:
     auto num = num_workers();
     workers_.reserve(num);
 
+	std::vector<worker_group*> leafs;
+    leafs.reserve(64);
     wg_root_.wg_children.reserve(8);
     int id = 1;
     for(size_t i = 0; i < 8; i++){
         //root has id 0
-        wg_root_.wg_children.push_back(new worker_group(&wg_root_, id++));
+        worker_group* wg_tmp = new worker_group(&wg_root_, id++);
+        wg_root_.wg_children.push_back(wg_tmp);
         //std::cout << i << ":" << id << std::endl;
         for(size_t j = 0; j < 4; j++){
-            worker_group* wg_tmp = wg_root_.wg_children[i];
-            wg_tmp->wg_children.push_back(new worker_group(wg_tmp, id++));
-            wg_tmp->worker_ids.push_back(i*8+j*2);
-            wg_tmp->worker_ids.push_back(i*8+j*2+1);
+            worker_group* nwg = new worker_group(wg_tmp, id++);
+            wg_tmp->wg_children.push_back(nwg);
+            leafs.push_back(nwg);
             //std::cout << "\t" << j << ":" << id << std::endl;
-
+        }
+        // direct children of wg_root [0-7][8-15]...
+        for(size_t j =0; j < 8; j++) {
+            wg_tmp->worker_ids.push_back(i*8+j);
         }
     }
 
-    worker_group* wg = wg_root_.wg_children[0];
     for (size_t i = 0; i < num; ++i){
-//        std::cout << i/8 << ":" << (i%8)/2 << std::endl;
-        wg=wg_root_.wg_children[(i/8)]->wg_children[(i%4)];
-      workers_.emplace_back(new worker_type(i, this, max_throughput_, wg));
-      wg->worker_ids.push_back(i);
+      //wg=wg_root_.wg_children[(i/8)]->wg_children[(i%4)];
+      workers_.emplace_back(new worker_type(i, this, max_throughput_, leafs[i/2]));
       wg_root_.worker_ids.push_back(i);
+      leafs[i/2]->worker_ids.push_back(i);
 
     }
     // start all workers now that all workers have been initialized
