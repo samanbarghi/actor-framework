@@ -139,6 +139,22 @@ public:
 	++tail_counter_;
   }
 
+// acquires only one lock
+  pointer append_multi(node* first, node* last, size_t length) {
+    CAF_ASSERT(first != nullptr);
+    CAF_ASSERT(last != nullptr);
+    lock_guard guard(tail_lock_);
+    // publish & swing last forward
+    auto head_tmp = first->value;
+    first = first->next;
+    last->next = nullptr;
+    if(first)
+        tail_.load()->next = first;
+    tail_ = last;
+	tail_counter_ += length-1;
+    return head_tmp;
+  }
+
   // acquires both locks
   void prepend(pointer value) {
     CAF_ASSERT(value != nullptr);
@@ -208,6 +224,40 @@ public:
     return result;
   }
 
+  node* take_tail_half(node** last, size_t &length) {
+      node* result = nullptr;
+    { // lifetime scope of guards
+      lock_guard guard1(head_lock_);
+      lock_guard guard2(tail_lock_);
+      CAF_ASSERT(head_ != nullptr);
+      if(get_size() < 16)
+          return nullptr;
+      *last = tail_.load();
+      tail_ = find_last_half(length);
+      length = get_size() - length;
+      //std::cout << get_size() << ":" << length << std::endl;
+
+      CAF_ASSERT(tail_ != nullptr);
+      result = tail_.load()->next;
+      tail_.load()->next = nullptr;
+
+	  tail_counter_ -= length;
+    }
+    return result;
+  }
+
+  pointer steal_half_from(double_ended_queue &queue) {
+      size_t length = 0;
+      node* last = nullptr;
+      node* half = queue.take_tail_half(&last, length);
+      if(!half)
+          return queue.take_tail();
+      if(length == 1)
+          return half->value;
+      return append_multi(half, last, length);
+      //return take_head();
+  }
+
   // does not lock
   bool empty() const {
     // atomically compares first and last pointer without locks
@@ -223,6 +273,16 @@ private:
       }
     }
     return nullptr;
+  }
+  // precondition: *both* locks acquired
+  node* find_last_half(size_t& j) {
+      size_t size = get_size();
+      node* mid = nullptr;
+      j = 0;
+    for (auto i = head_.load(); i != nullptr && j < size-2; i = i->next, j++) {
+        mid = i;
+    }
+    return mid;
   }
 
   // guarded by head_lock_

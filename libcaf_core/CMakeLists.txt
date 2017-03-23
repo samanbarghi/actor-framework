@@ -96,6 +96,8 @@ set (LIBCAF_CORE_SRCS
      src/uniform_type_info_map.cpp
      src/unprofiled.cpp
      src/work_stealing.cpp
+     src/work_shier.cpp
+     src/work_shchunk.cpp
      src/work_sharing.cpp)
 
 add_custom_target(libcaf_core)

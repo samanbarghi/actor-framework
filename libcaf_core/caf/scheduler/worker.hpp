@@ -44,13 +44,15 @@ public:
   using coordinator_ptr = coordinator<Policy>*;
   using policy_data = typename Policy::worker_data;
 
-  worker(size_t worker_id, coordinator_ptr worker_parent, size_t throughput, worker_group* wg_parent)
+  worker(size_t worker_id, coordinator_ptr worker_parent, size_t throughput, worker_group* wg_parent, size_t min, size_t max)
       : execution_unit(&worker_parent->system()),
         max_throughput_(throughput),
         id_(worker_id),
         parent_(worker_parent),
         data_(worker_parent),
-		wg_parent(wg_parent){
+		wg_parent(wg_parent),
+        numa_min_(min),
+        numa_max_(max){
     // nop
   }
 
@@ -177,6 +179,8 @@ public:
   size_t failed_steals = 0;
   size_t all_steals = 0;
   size_t repeat_steals = 0;
+  size_t numa_min_;
+  size_t numa_max_;
 };
 
 } // namespace scheduler

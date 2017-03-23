@@ -40,7 +40,23 @@ public:
 	size_t id;
 	std::vector<size_t> worker_ids;
 	std::vector<worker_group*> wg_children;
-	worker_group(worker_group* p, size_t i): parent(p), id(i){};
+    std::uniform_int_distribution<size_t> uniform;
+    std::default_random_engine rengine;
+    size_t repeat;
+    size_t size_;
+	worker_group(worker_group* p, size_t i, size_t size, size_t r): parent(p), id(i), uniform(0, size-2), rengine(std::random_device{}()), repeat(r), size_(size){};
+
+    int get_no(size_t sid){
+        if(size_ < 3) {
+            return (sid+1)%2;
+        }
+        auto victim =  uniform(rengine);
+        victim = worker_ids[victim];
+    	if (victim == sid)
+    	   victim = worker_ids[worker_ids.size()-1];
+        return victim;
+    }
+
 };
 /// Policy-based implementation of the abstract coordinator base class.
 template <class Policy>
@@ -50,7 +66,7 @@ public:
 
   using policy_data = typename Policy::coordinator_data;
 
-  coordinator(actor_system& sys) : super(sys), data_(this), wg_root_(nullptr, 0) {
+  coordinator(actor_system& sys) : super(sys), data_(this), wg_root_(nullptr, 0, 64, 20) {
     // nop
   }
 
@@ -76,11 +92,11 @@ protected:
     int id = 1;
     for(size_t i = 0; i < 8; i++){
         //root has id 0
-        worker_group* wg_tmp = new worker_group(&wg_root_, id++);
+        worker_group* wg_tmp = new worker_group(&wg_root_, id++, 8, 8);
         wg_root_.wg_children.push_back(wg_tmp);
         //std::cout << i << ":" << id << std::endl;
         for(size_t j = 0; j < 4; j++){
-            worker_group* nwg = new worker_group(wg_tmp, id++);
+            worker_group* nwg = new worker_group(wg_tmp, id++, 2, 2);
             wg_tmp->wg_children.push_back(nwg);
             leafs.push_back(nwg);
             //std::cout << "\t" << j << ":" << id << std::endl;
@@ -93,7 +109,9 @@ protected:
 
     for (size_t i = 0; i < num; ++i){
       //wg=wg_root_.wg_children[(i/8)]->wg_children[(i%4)];
-      workers_.emplace_back(new worker_type(i, this, max_throughput_, leafs[i/2]));
+      size_t min = (i/8)*8;
+      size_t max = min+7;
+      workers_.emplace_back(new worker_type(i, this, max_throughput_, leafs[i/2], min, max));
       wg_root_.worker_ids.push_back(i);
       leafs[i/2]->worker_ids.push_back(i);
 

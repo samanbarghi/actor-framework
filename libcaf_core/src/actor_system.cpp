@@ -28,6 +28,8 @@
 
 #include "caf/policy/work_sharing.hpp"
 #include "caf/policy/work_stealing.hpp"
+#include "caf/policy/work_shier.hpp"
+#include "caf/policy/work_shchunk.hpp"
 
 #include "caf/scheduler/coordinator.hpp"
 #include "caf/scheduler/test_coordinator.hpp"
@@ -209,14 +211,20 @@ actor_system::actor_system(actor_system_config& cfg)
   using test = scheduler::test_coordinator;
   using share = scheduler::coordinator<policy::work_sharing>;
   using steal = scheduler::coordinator<policy::work_stealing>;
+  using hier = scheduler::coordinator<policy::work_shier>;
+  using chunk = scheduler::coordinator<policy::work_shchunk>;
   using profiled_share = scheduler::profiled_coordinator<policy::work_sharing>;
   using profiled_steal = scheduler::profiled_coordinator<policy::work_stealing>;
+//  using profiled_steal_hier = scheduler::profiled_coordinator<policy::work_shier>;
+//  using profiled_steal_chunk = scheduler::profiled_coordinator<policy::work_shchunk>;
   // set scheduler only if not explicitly loaded by user
   if (!sched) {
     enum sched_conf {
       stealing          = 0x0001,
       sharing           = 0x0002,
       testing           = 0x0003,
+      sthier            = 0x0004,
+      stchunk           = 0x0005,
       profiled          = 0x0100,
       profiled_stealing = 0x0101,
       profiled_sharing  = 0x0102
@@ -224,6 +232,10 @@ actor_system::actor_system(actor_system_config& cfg)
     sched_conf sc = stealing;
     if (cfg.scheduler_policy == atom("sharing"))
       sc = sharing;
+    else if (cfg.scheduler_policy == atom("sthier"))
+      sc = sthier;
+    else if (cfg.scheduler_policy == atom("stchunk"))
+      sc = stchunk;
     else if (cfg.scheduler_policy == atom("testing"))
       sc = testing;
     else if (cfg.scheduler_policy != atom("stealing"))
@@ -236,6 +248,12 @@ actor_system::actor_system(actor_system_config& cfg)
     switch (sc) {
       default: // any invalid configuration falls back to work stealing
         sched.reset(new steal(*this));
+        break;
+      case sthier:
+        sched.reset(new hier(*this));
+        break;
+      case stchunk:
+        sched.reset(new chunk(*this));
         break;
       case sharing:
         sched.reset(new share(*this));
