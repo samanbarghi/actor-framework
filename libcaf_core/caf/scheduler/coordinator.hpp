@@ -44,7 +44,8 @@ public:
     std::default_random_engine rengine;
     size_t repeat;
     size_t size_;
-	worker_group(worker_group* p, size_t i, size_t size, size_t r): parent(p), id(i), uniform(0, size-2), rengine(std::random_device{}()), repeat(r), size_(size){};
+    std::vector<size_t> pollers;
+	worker_group(worker_group* p, size_t i, size_t size, size_t r): parent(p), id(i), uniform(0, size-2), rengine(std::random_device{}()), repeat(r), size_(size), pollers(size_, 0){};
 
     int get_no(size_t sid){
         if(size_ < 3) {
@@ -66,7 +67,7 @@ public:
 
   using policy_data = typename Policy::coordinator_data;
 
-  coordinator(actor_system& sys) : super(sys), data_(this), wg_root_(nullptr, 0, 64, 20) {
+  coordinator(actor_system& sys) : super(sys), data_(this), wg_root_(nullptr, 0, 64, 24) {
     // nop
   }
 
@@ -92,7 +93,7 @@ protected:
     int id = 1;
     for(size_t i = 0; i < 8; i++){
         //root has id 0
-        worker_group* wg_tmp = new worker_group(&wg_root_, id++, 8, 8);
+        worker_group* wg_tmp = new worker_group(&wg_root_, id++, 8, 12);
         wg_root_.wg_children.push_back(wg_tmp);
         //std::cout << i << ":" << id << std::endl;
         for(size_t j = 0; j < 4; j++){

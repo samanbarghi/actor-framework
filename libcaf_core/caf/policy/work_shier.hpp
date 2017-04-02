@@ -123,7 +123,9 @@ public:
     }
     if(repeat >= wg_current->repeat) {
         if(wg_current->parent)
-        wg_current = wg_current->parent;
+            wg_current = wg_current->parent;
+        else
+            wg_current =  self->get_parent();
 
         //if(!wg_current){
         //    wg_current =  self->get_parent();
@@ -132,6 +134,9 @@ public:
     }
     ++repeat;
 	auto victim = wg_current->get_no(self->id());
+    if(victim < self->numa_min_ || victim > self->numa_max_)
+        ++self->chunk_steals;
+
     queue_type &queue = d(p->worker_by_id(victim)).queue;
 /*    if(queue.get_size() == 0)
         return nullptr;*/

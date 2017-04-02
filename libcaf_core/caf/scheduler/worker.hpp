@@ -152,7 +152,7 @@ private:
         }
         case resumable::shutdown_execution_unit: {
             std::stringstream ss;
-            ss << all_steals << ":" << failed_steals << ":" <<  repeat_steals << ":" << (failed_steals/(double)all_steals) <<  std::endl;
+            ss << all_steals << ":" << failed_steals << ":" <<  repeat_steals << ":" << chunk_steals << ":" << (failed_steals/(double)all_steals) <<  std::endl;
             std::cout << ss.str();
           policy_.after_completion(this, job);
           policy_.before_shutdown(this);
@@ -179,6 +179,7 @@ public:
   size_t failed_steals = 0;
   size_t all_steals = 0;
   size_t repeat_steals = 0;
+  size_t chunk_steals = 0;
   size_t numa_min_;
   size_t numa_max_;
 };

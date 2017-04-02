@@ -122,14 +122,24 @@ public:
       return nullptr;
     }
     if(repeat >= wg_current->repeat) {
+        if(wg_current->repeat == 12){
+            if(!std::all_of(wg_current->pollers.cbegin(), wg_current->pollers.cend(), [](size_t i){ return i  == 0;})){
+                repeat = 0;
+                return nullptr;
+            }else{
+                wg_current->pollers[self->id()%8] = 1;
+            }
+        }
         if(wg_current->parent)
             wg_current = wg_current->parent;
-        else
+        else{
             wg_current =  self->get_parent();
+            wg_current->parent->parent->pollers[self->id()%8] = 0;
+        }
 
-        //if(!wg_current){
-        //    wg_current =  self->get_parent();
-        //}
+        /*if(!wg_current){
+            wg_current =  self->get_parent();
+        }*/
         repeat = 0;
     }
     ++repeat;
@@ -139,74 +149,15 @@ public:
         return nullptr;*/
 
 	// steal oldest element from the victim's queue
-    if(wg_current->repeat < 9 || queue.get_size() < 16  || (victim > self->numa_min_ && victim < self->numa_max_))
+//    if(wg_current->parent != nullptr || queue.get_size() < 16)
 	    return queue.take_tail();
-    else
-        return d(self).queue.steal_half_from(queue);
-  }
+//    else{
+        /*if(victim > self->numa_min_ && victim < self->numa_max_)
+            victim += self->numa_min_;*/
+//        ++self->chunk_steals;
 
-  // Goes on a raid in quest for a shiny new job.
-  template <class Worker, class WorkerGroup>
-  resumable* try_steal_h2(Worker* self, size_t &current, WorkerGroup &wg_current, size_t &repeat) {
-    auto p = self->parent();
-    if (p->num_workers() < 2) {
-      // you can't steal from yourself, can you?
-      return nullptr;
-    }
-    // roll the dice to pick a victim other than ourselves
-    /*auto victim = d(self).uniform(d(self).rengine);
-    if (victim == self->id())
-      victim = p->num_workers() - 1;
-    // steal oldest element from the victim's queue
-    return d(p->worker_by_id(victim)).queue.take_tail();*/
-
-    auto wp = wg_current->worker_ids;
-    //if(current == min) current = max+1;
-	/*if(wg_current-> parent == nullptr)
-	{
-		auto victim = d(self).uniform(d(self).rengine);
-		if (victim == self->id())
-		  victim = p->num_workers() - 1;
-		// steal oldest element from the victim's queue
-		return d(p->worker_by_id(victim)).queue.take_tail();
-
-	}*/
-
-	if(wg_current-> parent == nullptr){
-        wg_current = nullptr;
-        return nullptr;
-    }
-    if(current > wp[wp.size()-1]){
-/*        if(repeat < 4 * log(wp.size())){
-            ++repeat;
-        }else{
-            repeat=0;*/
-            wg_current = wg_current->parent;
-            if(!wg_current){
-            //{
-                return nullptr;
-            //    wg_current =  self->get_parent();
-            }
-       /*         min = max = self->id();
-            }else{
-                min = wp[0];
-                max = wp[wp.size()-1];
-            }*/
-        //}
-        current = wg_current->worker_ids[0];
-    }
-    if(current == self->id()) {
-        ++current;
-        return nullptr;
-    }
-//    if(self->id() == 63)
-//        std::cout << self->id() << ":" << current << std::endl;
-    //std::cout << current << std::endl;
-	if(d(p->worker_by_id(current)).queue.get_size() == 0){
-		++current;
-		return nullptr;
-		}
-    return d(p->worker_by_id(current++)).queue.take_tail();
+//        return d(self).queue.steal_half_from(queue);
+//    }
   }
 
   template <class Coordinator>
@@ -261,14 +212,17 @@ public:
     for (auto& strat : strategies) {
       for (size_t i = 0; i < strat.attempts; i += strat.step_size) {
         job = d(self).queue.take_head();
-        if (job)
+        if (job){
+            wg_current->pollers[self->id()%8] = 0;
           return job;
+          }
         // try to steal every X poll attempts
         if ((i % strat.steal_interval) == 0) {
           ++self->all_steals;
           job = try_steal_h(self, current, wg_current, repeat);
           //job = try_steal(self);
           if (job){
+            wg_current->pollers[self->id()%8] = 0;
             return job;
           }
           ++self->failed_steals;
