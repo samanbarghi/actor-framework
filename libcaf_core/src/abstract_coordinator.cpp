@@ -43,6 +43,7 @@
 
 #include "caf/policy/work_stealing.hpp"
 #include "caf/policy/work_shier.hpp"
+#include "caf/policy/work_shier_load.hpp"
 #include "caf/policy/work_shchunk.hpp"
 
 #include "caf/logger.hpp"

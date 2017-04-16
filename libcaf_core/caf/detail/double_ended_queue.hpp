@@ -279,7 +279,7 @@ private:
       size_t size = get_size();
       node* mid = nullptr;
       j = 0;
-    for (auto i = head_.load(); i != nullptr && j < 2*size/3; i = i->next, j++) {
+    for (auto i = head_.load(); i != nullptr && j < size-8; i = i->next, j++) {
         mid = i;
     }
     return mid;

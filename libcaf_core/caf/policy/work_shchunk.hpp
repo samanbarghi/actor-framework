@@ -122,20 +122,10 @@ public:
       return nullptr;
     }
     if(repeat >= wg_current->repeat) {
-        if(wg_current->repeat == 12){
-            if(!std::all_of(wg_current->pollers.cbegin(), wg_current->pollers.cend(), [](size_t i){ return i  == 0;})){
-                repeat = 0;
-                return nullptr;
-            }else{
-                wg_current->pollers[self->id()%8] = 1;
-            }
-        }
         if(wg_current->parent)
             wg_current = wg_current->parent;
-        else{
+        else
             wg_current =  self->get_parent();
-            wg_current->parent->parent->pollers[self->id()%8] = 0;
-        }
 
         /*if(!wg_current){
             wg_current =  self->get_parent();
@@ -149,15 +139,15 @@ public:
         return nullptr;*/
 
 	// steal oldest element from the victim's queue
-//    if(wg_current->parent != nullptr || queue.get_size() < 16)
+    if(wg_current->parent != nullptr || queue.get_size() < 16)
 	    return queue.take_tail();
-//    else{
+    else{
         /*if(victim > self->numa_min_ && victim < self->numa_max_)
             victim += self->numa_min_;*/
-//        ++self->chunk_steals;
+        ++self->chunk_steals;
 
-//        return d(self).queue.steal_half_from(queue);
-//    }
+        return d(self).queue.steal_half_from(queue);
+    }
   }
 
   template <class Coordinator>
@@ -212,17 +202,14 @@ public:
     for (auto& strat : strategies) {
       for (size_t i = 0; i < strat.attempts; i += strat.step_size) {
         job = d(self).queue.take_head();
-        if (job){
-            wg_current->pollers[self->id()%8] = 0;
+        if (job)
           return job;
-          }
         // try to steal every X poll attempts
         if ((i % strat.steal_interval) == 0) {
           ++self->all_steals;
           job = try_steal_h(self, current, wg_current, repeat);
           //job = try_steal(self);
           if (job){
-            wg_current->pollers[self->id()%8] = 0;
             return job;
           }
           ++self->failed_steals;

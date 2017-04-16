@@ -44,8 +44,7 @@ public:
     std::default_random_engine rengine;
     size_t repeat;
     size_t size_;
-    std::vector<size_t> pollers;
-	worker_group(worker_group* p, size_t i, size_t size, size_t r): parent(p), id(i), uniform(0, size-2), rengine(std::random_device{}()), repeat(r), size_(size), pollers(size_, 0){};
+	worker_group(worker_group* p, size_t i, size_t size, size_t r): parent(p), id(i), uniform(0, size-2), rengine(std::random_device{}()), repeat(r), size_(size){};
 
     int get_no(size_t sid){
         if(size_ < 3) {
@@ -57,6 +56,7 @@ public:
     	   victim = worker_ids[worker_ids.size()-1];
         return victim;
     }
+
 
 };
 /// Policy-based implementation of the abstract coordinator base class.
@@ -87,6 +87,7 @@ protected:
     auto num = num_workers();
     workers_.reserve(num);
 
+#if 0
 	std::vector<worker_group*> leafs;
     leafs.reserve(64);
     wg_root_.wg_children.reserve(8);
@@ -117,6 +118,60 @@ protected:
       leafs[i/2]->worker_ids.push_back(i);
 
     }
+#else
+	std::vector<worker_group*> leafs;
+    leafs.reserve(64);
+    int id = 1;
+
+    wg_root_.wg_children.reserve(2);
+    for(size_t i = 0; i < 2; i++){
+        //root has id 0
+        worker_group* r1 = new worker_group(&wg_root_, id++, 32, 20);
+        wg_root_.wg_children.push_back(r1);
+        // direct children of wg_root [0-31][32-63]...
+        for(size_t j =0; j < 32; j++)
+            r1->worker_ids.push_back(i*32+j);
+
+        for(size_t i2 =0 ; i2 < 2; i2++) {
+            worker_group* r2 = new worker_group(r1, id++, 16, 8);
+            wg_root_.wg_children.push_back(r2);
+
+            for(size_t j =0; j < 16; j++)
+                r2->worker_ids.push_back(i*32+i2*16+j);
+
+            for(size_t i3 =0 ; i3 < 2; i3++) {
+                worker_group* r3 = new worker_group(r2, id++, 8, 8);
+                wg_root_.wg_children.push_back(r3);
+
+                for(size_t j =0; j < 8; j++)
+                    r3->worker_ids.push_back(i*32+i2*16+i3*8+j);
+
+                for(size_t j = 0; j < 4; j++){
+                    worker_group* nwg = new worker_group(r3, id++, 2, 1);
+                    r3->wg_children.push_back(nwg);
+                    leafs.push_back(nwg);
+                    //std::cout << "\t" << j << ":" << id << std::endl;
+                }
+
+            }
+
+
+        }
+
+
+    }
+
+    for (size_t i = 0; i < num; ++i){
+      //wg=wg_root_.wg_children[(i/8)]->wg_children[(i%4)];
+      size_t min = (i/8)*8;
+      size_t max = min+7;
+      workers_.emplace_back(new worker_type(i, this, max_throughput_, leafs[i/2], min, max));
+      wg_root_.worker_ids.push_back(i);
+      leafs[i/2]->worker_ids.push_back(i);
+
+    }
+
+#endif
     // start all workers now that all workers have been initialized
     for (auto& w : workers_)
       w->start();

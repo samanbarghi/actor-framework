@@ -96,6 +96,7 @@
 #include "caf/typed_response_promise.hpp"
 #include "caf/typed_event_based_actor.hpp"
 #include "caf/abstract_composable_behavior.hpp"
+#include "caf/detail/double_ended_queue.hpp"
 
 #include "caf/decorator/sequencer.hpp"
 

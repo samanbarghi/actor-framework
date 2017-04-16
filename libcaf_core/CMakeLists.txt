@@ -97,6 +97,7 @@ set (LIBCAF_CORE_SRCS
      src/unprofiled.cpp
      src/work_stealing.cpp
      src/work_shier.cpp
+     src/work_shier_load.cpp
      src/work_shchunk.cpp
      src/work_sharing.cpp)
 

@@ -124,8 +124,8 @@ public:
     if(repeat >= wg_current->repeat) {
         if(wg_current->parent)
             wg_current = wg_current->parent;
-        else
-            wg_current =  self->get_parent();
+        /*else
+            wg_current =  self->get_parent();*/
 
         //if(!wg_current){
         //    wg_current =  self->get_parent();
