@@ -68,7 +68,7 @@ public:
     }};
 
     //int rc =
-    pthread_setaffinity_np(this_thread_.native_handle(), sizeof(cpu_set_t), &cpuset);
+   pthread_setaffinity_np(this_thread_.native_handle(), sizeof(cpu_set_t), &cpuset);
 //    std::cout << this->id_ << ":" << this->get_parent()->id << std::endl;
   }
 
@@ -151,9 +151,9 @@ private:
           break;
         }
         case resumable::shutdown_execution_unit: {
-            std::stringstream ss;
+            /*std::stringstream ss;
             ss << all_steals << ":" << failed_steals << ":" <<  repeat_steals << ":" << chunk_steals << ":" << (failed_steals/(double)all_steals) <<  std::endl;
-            std::cout << ss.str();
+            std::cout << ss.str();*/
           policy_.after_completion(this, job);
           policy_.before_shutdown(this);
           return;

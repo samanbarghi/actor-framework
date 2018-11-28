@@ -36,6 +36,9 @@ namespace scheduler {
 
 class worker_group {
 public:
+    using queue_type = std::list<resumable*>;
+
+
 	worker_group* parent;
 	size_t id;
 	std::vector<size_t> worker_ids;
@@ -44,7 +47,18 @@ public:
     std::default_random_engine rengine;
     size_t repeat;
     size_t size_;
-	worker_group(worker_group* p, size_t i, size_t size, size_t r): parent(p), id(i), uniform(0, size-2), rengine(std::random_device{}()), repeat(r), size_(size){};
+    size_t base_;
+
+
+    size_t next_wg_;
+//work sharing
+    queue_type queue;
+    std::mutex lock;
+    std::condition_variable cv;
+    std::atomic<int> pollers;
+
+
+	worker_group(worker_group* p, size_t i, size_t size, size_t r, size_t base): parent(p), id(i), uniform(0, size-2), rengine(std::random_device{}()), repeat(r), size_(size), next_wg_(0), base_(base), pollers(0){};
 
     int get_no(size_t sid){
         if(size_ < 3) {
@@ -67,7 +81,7 @@ public:
 
   using policy_data = typename Policy::coordinator_data;
 
-  coordinator(actor_system& sys) : super(sys), data_(this), wg_root_(nullptr, 0, 64, 24) {
+  coordinator(actor_system& sys) : super(sys), data_(this), wg_root_(nullptr, 0, 64, 24, 0) {
     // nop
   }
 
@@ -86,19 +100,19 @@ protected:
     // initialize workers vector
     auto num = num_workers();
     workers_.reserve(num);
-
-#if 0
 	std::vector<worker_group*> leafs;
     leafs.reserve(64);
-    wg_root_.wg_children.reserve(8);
     int id = 1;
+
+#if 1
+    wg_root_.wg_children.reserve(8);
     for(size_t i = 0; i < 8; i++){
         //root has id 0
-        worker_group* wg_tmp = new worker_group(&wg_root_, id++, 8, 12);
+        worker_group* wg_tmp = new worker_group(&wg_root_, id++, 8, 12, i*8);
         wg_root_.wg_children.push_back(wg_tmp);
         //std::cout << i << ":" << id << std::endl;
         for(size_t j = 0; j < 4; j++){
-            worker_group* nwg = new worker_group(wg_tmp, id++, 2, 2);
+            worker_group* nwg = new worker_group(wg_tmp, id++, 2, 2, i*8+j);
             wg_tmp->wg_children.push_back(nwg);
             leafs.push_back(nwg);
             //std::cout << "\t" << j << ":" << id << std::endl;
@@ -119,35 +133,35 @@ protected:
 
     }
 #else
-	std::vector<worker_group*> leafs;
-    leafs.reserve(64);
-    int id = 1;
-
     wg_root_.wg_children.reserve(2);
     for(size_t i = 0; i < 2; i++){
         //root has id 0
-        worker_group* r1 = new worker_group(&wg_root_, id++, 32, 20);
+        worker_group* r1 = new worker_group(&wg_root_, id++, 32, 20, i*32);
         wg_root_.wg_children.push_back(r1);
         // direct children of wg_root [0-31][32-63]...
-        for(size_t j =0; j < 32; j++)
+        for(size_t j =0; j < 32; j++){
             r1->worker_ids.push_back(i*32+j);
+        }
 
         for(size_t i2 =0 ; i2 < 2; i2++) {
-            worker_group* r2 = new worker_group(r1, id++, 16, 8);
-            wg_root_.wg_children.push_back(r2);
+            worker_group* r2 = new worker_group(r1, id++, 16, 16, i*32+i2*16);
+            r1->wg_children.push_back(r2);
 
-            for(size_t j =0; j < 16; j++)
+            for(size_t j =0; j < 16; j++){
                 r2->worker_ids.push_back(i*32+i2*16+j);
+            }
 
             for(size_t i3 =0 ; i3 < 2; i3++) {
-                worker_group* r3 = new worker_group(r2, id++, 8, 8);
-                wg_root_.wg_children.push_back(r3);
+                worker_group* r3 = new worker_group(r2, id++, 8, 12, i*32+i2*16+i3*4);
+                r2->wg_children.push_back(r3);
 
-                for(size_t j =0; j < 8; j++)
-                    r3->worker_ids.push_back(i*32+i2*16+i3*8+j);
+                for(size_t j =0; j < 8; j++){
+                    r3->worker_ids.push_back(i*32+i2*16+i3*4+j);
+
+                }
 
                 for(size_t j = 0; j < 4; j++){
-                    worker_group* nwg = new worker_group(r3, id++, 2, 1);
+                    worker_group* nwg = new worker_group(r3, id++, 2, 2, i*32+i2*16+i3*4+j);
                     r3->wg_children.push_back(nwg);
                     leafs.push_back(nwg);
                     //std::cout << "\t" << j << ":" << id << std::endl;
@@ -157,7 +171,6 @@ protected:
 
 
         }
-
 
     }
 
@@ -240,6 +253,11 @@ protected:
     policy_.central_enqueue(this, ptr);
   }
 
+
+public:
+  worker_group& get_root(){
+      return wg_root_;
+  }
 private:
   // usually of size std::thread::hardware_concurrency()
   std::vector<std::unique_ptr<worker_type>> workers_;

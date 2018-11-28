@@ -17,8 +17,8 @@
  * http://www.boost.org/LICENSE_1_0.txt.                                      *
  ******************************************************************************/
 
-#ifndef CAF_POLICY_WORK_STEALING_HIER_HPP
-#define CAF_POLICY_WORK_STEALING_HIER_HPP
+#ifndef CAF_POLICY_WORK_STEALING_HIER_LOAD_HPP
+#define CAF_POLICY_WORK_STEALING_HIER_LOAD_HPP
 
 #include <deque>
 #include <chrono>
@@ -37,9 +37,9 @@ namespace caf {
 namespace policy {
 /// Implements scheduling of actors via work stealing.
 /// @extends scheduler_policy
-class work_shier : public unprofiled {
+class work_shier_load : public unprofiled {
 public:
-  ~work_shier() override;
+  ~work_shier_load() override;
 
   // A thread-safe queue implementation.
   using queue_type = detail::double_ended_queue<resumable>;
@@ -124,8 +124,8 @@ public:
     if(repeat >= wg_current->repeat) {
         if(wg_current->parent)
             wg_current = wg_current->parent;
-        /*else
-            wg_current =  self->get_parent();*/
+        else
+            wg_current =  self->get_parent();
 
         //if(!wg_current){
         //    wg_current =  self->get_parent();
@@ -133,119 +133,75 @@ public:
         repeat = 0;
     }
     ++repeat;
-	auto victim = wg_current->get_no(self->id());
+    int victim = -1;
+    auto sid = self->id();
+    if(wg_current->size_ < 3)
+        victim = (sid+1)%2;
+    else if(wg_current->size_ < 7){
+        int size = 0;
+        wg_current->pollers++;
+        for(auto &wv: wg_current->worker_ids){
+            auto qsize = d(p->worker_by_id(wv)).queue.get_size();
+            if( qsize > size ) {
+                victim = wv;
+                size = qsize;
+            }
+        }
+        if(victim == -1) {
+            //start with root
+            // local node is empty
+            wg_current = wg_current->parent;
+            repeat =0;
+            //return try_steal_h(self, current, wg_current, repeat);
+            wg_current->pollers--;
+            return nullptr;
+        }else{
+            if(wg_current->pollers > 4){
+                wg_current->pollers--;
+                return nullptr;
+            }
+        }
+    }else
+	    victim = wg_current->get_no(self->id());
+
     if(victim < self->numa_min_ || victim > self->numa_max_)
         ++self->chunk_steals;
 
     queue_type &queue = d(p->worker_by_id(victim)).queue;
-/*    if(queue.get_size() == 0)
-        return nullptr;*/
+    if(queue.get_size() == 0) {
+        if(wg_current->size_ < 7)
+            wg_current->pollers--;
 
-	// steal oldest element from the victim's queue
-//    if(wg_current->repeat < 9 || queue.get_size() < 16  || (victim > (self->id()/8)*8 && victim < ((self->id()/8)*8)+1))
-	    return queue.take_tail();
-//    else
-//        return d(self).queue.steal_half_from(queue);
-  }
-
-  // Goes on a raid in quest for a shiny new job.
-  template <class Worker, class WorkerGroup>
-  resumable* try_steal_h2(Worker* self, size_t &current, WorkerGroup &wg_current, size_t &repeat) {
-    auto p = self->parent();
-    if (p->num_workers() < 2) {
-      // you can't steal from yourself, can you?
-      return nullptr;
-    }
-    // roll the dice to pick a victim other than ourselves
-    /*auto victim = d(self).uniform(d(self).rengine);
-    if (victim == self->id())
-      victim = p->num_workers() - 1;
-    // steal oldest element from the victim's queue
-    return d(p->worker_by_id(victim)).queue.take_tail();*/
-
-    auto wp = wg_current->worker_ids;
-    //if(current == min) current = max+1;
-	/*if(wg_current-> parent == nullptr)
-	{
-		auto victim = d(self).uniform(d(self).rengine);
-		if (victim == self->id())
-		  victim = p->num_workers() - 1;
-		// steal oldest element from the victim's queue
-		return d(p->worker_by_id(victim)).queue.take_tail();
-
-	}*/
-
-	if(wg_current-> parent == nullptr){
-        wg_current = nullptr;
         return nullptr;
     }
-    if(current > wp[wp.size()-1]){
-/*        if(repeat < 4 * log(wp.size())){
-            ++repeat;
-        }else{
-            repeat=0;*/
-            wg_current = wg_current->parent;
-            if(!wg_current){
-            //{
-                return nullptr;
-            //    wg_current =  self->get_parent();
-            }
-       /*         min = max = self->id();
-            }else{
-                min = wp[0];
-                max = wp[wp.size()-1];
-            }*/
-        //}
-        current = wg_current->worker_ids[0];
-    }
-    if(current == self->id()) {
-        ++current;
-        return nullptr;
-    }
-//    if(self->id() == 63)
-//        std::cout << self->id() << ":" << current << std::endl;
-    //std::cout << current << std::endl;
-	if(d(p->worker_by_id(current)).queue.get_size() == 0){
-		++current;
-		return nullptr;
-		}
-    return d(p->worker_by_id(current++)).queue.take_tail();
+
+	    auto tail = queue.take_tail();
+        if(wg_current->size_ < 7)
+            wg_current->pollers--;
+        return tail;
   }
 
   template <class Coordinator>
   void central_enqueue(Coordinator* self, resumable* job) {
-    //auto w = self->worker_by_id(d(self).next_worker++ % self->num_workers());
-    //w->external_enqueue(job);
-    auto wg = self->get_root().wg_children[(self->get_root().next_wg_++)%(self->get_root().wg_children.size())];
-
-    std::unique_lock<std::mutex> guard(wg->lock);
-    wg->queue.push_back(job);
+    auto w = self->worker_by_id(d(self).next_worker++ % self->num_workers());
+    w->external_enqueue(job);
   }
 
   template <class Worker>
   void external_enqueue(Worker* self, resumable* job) {
-    auto wg = self->get_parent()->parent;
-    //auto wg = self->parent()->get_root().wg_children[(self->parent()->get_root().next_wg_++)%(self->parent()->get_root().wg_children.size())];
-    std::unique_lock<std::mutex> guard(wg->lock);
-    wg->queue.push_back(job);
+    d(self).queue.append(job);
   }
 
   template <class Worker>
   void internal_enqueue(Worker* self, resumable* job) {
-    auto wg = self->get_parent()->parent;
-    std::unique_lock<std::mutex> guard(wg->lock);
-    wg->queue.push_front(job);
+    d(self).queue.prepend(job);
   }
 
   template <class Worker>
   void resume_job_later(Worker* self, resumable* job) {
     // job has voluntarily released the CPU to let others run instead
     // this means we are going to put this job to the very end of our queue
-    auto wg = self->get_parent()->parent;
-    std::unique_lock<std::mutex> guard(wg->lock);
-    wg->queue.push_back(job);
-
-//    d(self).queue.append(job);
+    d(self).queue.append(job);
   }
 
   template <class Worker>
@@ -259,32 +215,22 @@ public:
     // "signalizing" implementation based on mutexes and conition variables
     auto& strategies = d(self).strategies;
     resumable* job = nullptr;
-    size_t current = 0;
-    auto wg = self->get_parent()->parent;
-    auto p = self->parent();
+    size_t current = self->get_parent()->worker_ids[0];
+    auto wg_current = self->get_parent();
+    size_t repeat = 0;
     for (auto& strat : strategies) {
       for (size_t i = 0; i < strat.attempts; i += strat.step_size) {
-        {
-            std::unique_lock<std::mutex> guard(wg->lock);
-            if(!wg->queue.empty()){
-                job = wg->queue.front();
-                wg->queue.pop_front();
-                return job;
-            }
-        }
+        job = d(self).queue.take_head();
+        if (job)
+          return job;
         // try to steal every X poll attempts
         if ((i % strat.steal_interval) == 0) {
-            ++self->all_steals;
-            auto victim = p->get_root().wg_children[current++%8];
-            {
-                std::unique_lock<std::mutex> guard(victim->lock);
-                if(!victim->queue.empty()){
-                job = victim->queue.front();
-                 victim->queue.pop_front();
-                 return job;
-                }
-            }
-
+          ++self->all_steals;
+          job = try_steal_h(self, current, wg_current, repeat);
+          //job = try_steal(self);
+          if (job){
+            return job;
+          }
           ++self->failed_steals;
         }
         if (strat.sleep_duration.count() > 0)
@@ -314,4 +260,4 @@ public:
 } // namespace policy
 } // namespace caf
 
-#endif // CAF_POLICY_WORK_STEALING_HPP
+#endif // CAF_POLICY_WORK_STEALING_HIER_LOAD_HPP

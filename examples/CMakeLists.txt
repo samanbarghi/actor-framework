@@ -60,6 +60,10 @@ add(remoting distributed_calculator)
 add(broker simple_broker)
 add(broker simple_http_broker)
 
+add(chat_server chat_server)
+add(chat_server pubsub)
+add(chat_server chat_server_single)
+
 if(NOT CAF_NO_PROTOBUF_EXAMPLES)
   find_package(Protobuf)
   if(PROTOBUF_FOUND AND PROTOBUF_PROTOC_EXECUTABLE)

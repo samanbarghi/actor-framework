@@ -17,8 +17,8 @@
  * http://www.boost.org/LICENSE_1_0.txt.                                      *
  ******************************************************************************/
 
-#ifndef CAF_POLICY_WORK_STEALING_HIER_CHUNK_HPP
-#define CAF_POLICY_WORK_STEALING_HIER_CHUNK_HPP
+#ifndef CAF_POLICY_WORK_STEALING_HIER_LOAD_HPP_1
+#define CAF_POLICY_WORK_STEALING_HIER_LOAD_HPP_1
 
 #include <deque>
 #include <chrono>
@@ -37,7 +37,7 @@ namespace caf {
 namespace policy {
 /// Implements scheduling of actors via work stealing.
 /// @extends scheduler_policy
-class work_shchunk : public unprofiled {
+class work_shchunk: public unprofiled {
 public:
   ~work_shchunk() override;
 
@@ -127,27 +127,43 @@ public:
         else
             wg_current =  self->get_parent();
 
-        /*if(!wg_current){
-            wg_current =  self->get_parent();
-        }*/
+        //if(!wg_current){
+        //    wg_current =  self->get_parent();
+        //}
         repeat = 0;
     }
     ++repeat;
-	auto victim = wg_current->get_no(self->id());
-    queue_type &queue = d(p->worker_by_id(victim)).queue;
-/*    if(queue.get_size() == 0)
-        return nullptr;*/
+    int victim = -1;
+    auto sid = self->id();
+    if(wg_current->size_ < 3)
+        victim = (sid+1)%2;
+    else if(wg_current->size_ < 7){
+        int size = 0;
+        for(auto &wv: wg_current->worker_ids){
+            auto qsize = d(p->worker_by_id(wv)).queue.get_size();
+            if( qsize > size ) {
+                victim = wv;
+                size = qsize;
+            }
+        }
+        if(victim == -1) {
+            //start with root
+            // local node is empty
+            wg_current = wg_current->parent;
+            repeat =0;
+            return nullptr;
+        }
+    }else
+	    victim = wg_current->get_no(self->id());
 
-	// steal oldest element from the victim's queue
-    if(wg_current->parent != nullptr || queue.get_size() < 16)
-	    return queue.take_tail();
-    else{
-        /*if(victim > self->numa_min_ && victim < self->numa_max_)
-            victim += self->numa_min_;*/
+    if(victim < self->numa_min_ || victim > self->numa_max_)
         ++self->chunk_steals;
 
-        return d(self).queue.steal_half_from(queue);
-    }
+    queue_type &queue = d(p->worker_by_id(victim)).queue;
+    if(queue.get_size() == 0)
+        return nullptr;
+
+	    return queue.take_tail();
   }
 
   template <class Coordinator>
@@ -158,12 +174,19 @@ public:
 
   template <class Worker>
   void external_enqueue(Worker* self, resumable* job) {
+      job->worker_id = self->id();
     d(self).queue.append(job);
   }
 
   template <class Worker>
   void internal_enqueue(Worker* self, resumable* job) {
-    d(self).queue.prepend(job);
+      if(job->worker_id != 1000 && job->worker_id != self->id()) {
+         auto p = self->parent();
+          d(p->worker_by_id(job->worker_id)).queue.append(job);
+      }else{
+        job->worker_id = self->id();
+        d(self).queue.prepend(job);
+      }
   }
 
   template <class Worker>
@@ -187,18 +210,6 @@ public:
     size_t current = self->get_parent()->worker_ids[0];
     auto wg_current = self->get_parent();
     size_t repeat = 0;
-    //hierarchical stealing
-/*    while(wg_current) {
-        job = d(self).queue.take_head();
-        if (job)
-          return job;
-        // try to steal every X poll attempts
-            ++self->all_steals;
-          job = try_steal_h(self, current, wg_current, repeat);
-          if (job)
-            return job;
-          ++self->failed_steals;
-      }*/
     for (auto& strat : strategies) {
       for (size_t i = 0; i < strat.attempts; i += strat.step_size) {
         job = d(self).queue.take_head();
@@ -241,4 +252,4 @@ public:
 } // namespace policy
 } // namespace caf
 
-#endif // CAF_POLICY_WORK_STEALING_HPP
+#endif // CAF_POLICY_WORK_STEALING_HIER_LOAD_HPP

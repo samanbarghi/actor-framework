@@ -96,6 +96,7 @@ actor_system_config::actor_system_config()
   work_stealing_moderate_sleep_duration_us = 50;
   work_stealing_relaxed_steal_interval = 1;
   work_stealing_relaxed_sleep_duration_us = 10000;
+  work_stealing_pin_threads = true;
   logger_filename = "actor_log_[PID]_[TIMESTAMP]_[NODE].log";
   logger_console = atom("NONE");
   middleman_network_backend = atom("default");
@@ -130,7 +131,9 @@ actor_system_config::actor_system_config()
   .add(work_stealing_relaxed_steal_interval, "relaxed-steal-interval",
        "sets the frequency of steal attempts during relaxed polling")
   .add(work_stealing_relaxed_sleep_duration_us, "relaxed-sleep-duration",
-       "sets the sleep interval between poll attempts during relaxed polling");
+       "sets the sleep interval between poll attempts during relaxed polling")
+  .add(work_stealing_pin_threads, "pin-threads",
+       "Should pin threads?");
   opt_group{options_, "logger"}
   .add(logger_filename, "filename",
        "sets the filesystem path of the log file")

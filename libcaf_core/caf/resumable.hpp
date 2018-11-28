@@ -72,6 +72,9 @@ public:
 
   /// Remove a strong reference count from this object.
   virtual void intrusive_ptr_release_impl() = 0;
+
+  size_t worker_id = 1000;
+
 };
 
 // enables intrusive_ptr<resumable> without introducing ambiguity

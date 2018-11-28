@@ -251,6 +251,7 @@ public:
   size_t work_stealing_moderate_sleep_duration_us;
   size_t work_stealing_relaxed_steal_interval;
   size_t work_stealing_relaxed_sleep_duration_us;
+  bool work_stealing_pin_threads;;
 
   // -- config parameters for the logger ---------------------------------------
 
